@@ -9,26 +9,29 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/iolave/go-proxmox/pkg/cloudflare"
 	pihole "github.com/ryanwholey/go-pihole"
 )
 
 type Config struct {
-	Password  string
-	URL       string
-	UserAgent string
-	Client    *http.Client
-	APIToken  string
+	Password       string
+	URL            string
+	UserAgent      string
+	Client         *http.Client
+	APIToken       string
+	CFServiceToken *cloudflare.ServiceToken
 }
 
 type Client struct {
-	URL          string
-	UserAgent    string
-	password     string
-	sessionID    string
-	sessionToken string
-	webPassword  string
-	client       *http.Client
-	tokenClient  *pihole.Client
+	URL            string
+	UserAgent      string
+	password       string
+	sessionID      string
+	sessionToken   string
+	webPassword    string
+	client         *http.Client
+	tokenClient    *pihole.Client
+	cfServiceToken *cloudflare.ServiceToken
 }
 
 // doubleHash256 takes a string, double hashes it using the sha256 algorithm and returns the value
@@ -43,11 +46,12 @@ func doubleHash256(data string) string {
 // New returns a new Pi-hole client
 func New(config Config) *Client {
 	client := &Client{
-		URL:         config.URL,
-		UserAgent:   config.UserAgent,
-		password:    config.Password,
-		client:      config.Client,
-		webPassword: doubleHash256(config.Password),
+		URL:            config.URL,
+		UserAgent:      config.UserAgent,
+		password:       config.Password,
+		client:         config.Client,
+		webPassword:    doubleHash256(config.Password),
+		cfServiceToken: config.CFServiceToken,
 	}
 
 	if client.client == nil {
@@ -117,6 +121,14 @@ func (c *Client) Request(ctx context.Context, method string, path string, data *
 
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
+	if c.cfServiceToken == nil {
+		return req, nil
+	}
+
+	if err := c.cfServiceToken.Set(req); err != nil {
+		return nil, err
+	}
+
 	return req, nil
 }
 
@@ -152,6 +164,14 @@ func (c Client) RequestWithSession(ctx context.Context, method string, path stri
 	req.Header.Add("content-type", "application/x-www-form-urlencoded")
 	req.Header.Add("cookie", fmt.Sprintf("PHPSESSID=%s", c.sessionID))
 
+	if c.cfServiceToken == nil {
+		return req, nil
+	}
+
+	if err := c.cfServiceToken.Set(req); err != nil {
+		return nil, err
+	}
+
 	return req, nil
 }
 
@@ -171,7 +191,20 @@ func (c Client) RequestWithAuth(ctx context.Context, method string, path string,
 		d = &url.Values{}
 	}
 
-	return http.NewRequestWithContext(ctx, method, u.String(), strings.NewReader(d.Encode()))
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), strings.NewReader(d.Encode()))
+	if err != nil {
+		return nil, err
+	}
+
+	if c.cfServiceToken == nil {
+		return req, nil
+	}
+
+	if err := c.cfServiceToken.Set(req); err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // login sets a new sessionID and csrf token in the client to be used for logged in requests

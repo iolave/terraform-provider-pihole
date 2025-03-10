@@ -2,9 +2,11 @@ package provider
 
 import (
 	"context"
+	"errors"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/iolave/go-proxmox/pkg/cloudflare"
 	"github.com/ryanwholey/terraform-provider-pihole/internal/version"
 )
 
@@ -37,6 +39,18 @@ func Provider() *schema.Provider {
 				DefaultFunc: schema.EnvDefaultFunc("PIHOLE_CA_FILE", nil),
 				Description: "CA file to connect to Pi-hole with TLS",
 			},
+			"cf_access_client_id": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("CF_ACCESS_CLIENT_ID", nil),
+				Description: "Cloudflare access client id",
+			},
+			"cf_access_client_secret": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("CF_ACCESS_CLIENT_SECRET", nil),
+				Description: "Cloudflare access client secret",
+			},
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
@@ -62,12 +76,30 @@ func Provider() *schema.Provider {
 // configure configures a Pi-hole client to be used for terraform resource requests
 func configure(version string, provider *schema.Provider) func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
 	return func(ctx context.Context, d *schema.ResourceData) (client interface{}, diags diag.Diagnostics) {
+		cfClientId := d.Get("cf_access_client_id").(string)
+		cfClientSecret := d.Get("cf_access_client_secret").(string)
+		var cfServiceToken *cloudflare.ServiceToken = nil
+
+		if cfClientId != "" && cfClientSecret == "" {
+			return nil, diag.FromErr(errors.New("cf_access_client_id is setted but cfClientSecret is not"))
+		}
+		if cfClientId == "" && cfClientSecret != "" {
+			return nil, diag.FromErr(errors.New("cf_access_client_secret is setted but cfClientId is not"))
+		}
+		if cfClientId != "" && cfClientSecret != "" {
+			cfServiceToken = &cloudflare.ServiceToken{
+				ClientId:     cfClientId,
+				ClientSecret: cfClientSecret,
+			}
+		}
+
 		client, err := Config{
-			Password:  d.Get("password").(string),
-			URL:       d.Get("url").(string),
-			UserAgent: provider.UserAgent("terraform-provider-pihole", version),
-			APIToken:  d.Get("api_token").(string),
-			CAFile:    d.Get("ca_file").(string),
+			Password:       d.Get("password").(string),
+			URL:            d.Get("url").(string),
+			UserAgent:      provider.UserAgent("terraform-provider-pihole", version),
+			APIToken:       d.Get("api_token").(string),
+			CAFile:         d.Get("ca_file").(string),
+			CFServiceToken: cfServiceToken,
 		}.Client(ctx)
 		if err != nil {
 			return nil, diag.FromErr(err)

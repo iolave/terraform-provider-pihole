@@ -1,6 +1,8 @@
 module github.com/ryanwholey/terraform-provider-pihole
 
-go 1.22
+go 1.22.2
+
+toolchain go1.23.5
 
 require (
 	github.com/PuerkitoBio/goquery v1.9.3
@@ -39,6 +41,7 @@ require (
 	github.com/hashicorp/terraform-registry-address v0.2.3 // indirect
 	github.com/hashicorp/terraform-svchost v0.1.1 // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
+	github.com/iolave/go-proxmox v0.6.1 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

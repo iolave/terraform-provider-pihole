@@ -1,18 +1,28 @@
-default: test
+default: fmt lint install generate
 
-.PHONY: testall test lint docs
+build:
+	go build -v ./...
 
-testall:
-	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m
-
-docker-run:
-	docker compose up -d --build
-
-test:
-	go test ./...
+install: build
+	go install -v ./...
 
 lint:
 	golangci-lint run ./...
 
-docs:
+generate:
+	#cd tools; go generate ./...
 	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.19.4
+
+fmt:
+	gofmt -s -w -e .
+
+test:
+	go test ./...
+
+testacc:
+	TF_ACC=1 go test -v -cover -timeout 120m ./...
+
+docker-run:
+	docker compose up -d --build
+
+.PHONY: fmt lint test testacc build install generate
