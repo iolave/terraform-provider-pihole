@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [v0.1.2]
+### Fixed
+- Login now uses json request.
+
 ## [v0.1.1]
 ### Fixed
 - Login now uses the `/api/auth` endpoint.
