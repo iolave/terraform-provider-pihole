@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
+	"io"
+	"strings"
 
 	"github.com/ryanwholey/go-pihole"
 )
@@ -34,12 +35,10 @@ type DNSRecord = pihole.DNSRecord
 // ListDNSRecords Returns the list of custom DNS records configured in pihole
 func (c Client) ListDNSRecords(ctx context.Context) (DNSRecordList, error) {
 	if c.tokenClient != nil {
-		return c.tokenClient.LocalDNS.List(ctx)
+		return nil, fmt.Errorf("%w: set ad blocker status", ErrNotImplementedTokenClient)
 	}
 
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/customdns.php", &url.Values{
-		"action": []string{"get"},
-	})
+	req, err := c.RequestWithSession2(ctx, "GET", "/api/config/dns/hosts", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -48,15 +47,40 @@ func (c Client) ListDNSRecords(ctx context.Context) (DNSRecordList, error) {
 	if err != nil {
 		return nil, err
 	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to retrieve dns records, got status code %d", res.StatusCode)
+	}
 
 	defer res.Body.Close()
-
-	var dnsRes DNSRecordsListResponse
-	if err = json.NewDecoder(res.Body).Decode(&dnsRes); err != nil {
+	type Response struct {
+		Config struct {
+			DNS struct {
+				Hosts []string `json:"hosts"`
+			} `json:"dns"`
+		} `json:"config"`
+	}
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var response Response
+	if err := json.Unmarshal(b, &response); err != nil {
 		return nil, err
 	}
 
-	return dnsRes.ToDNSRecordList(), nil
+	var list DNSRecordList
+	for _, v := range response.Config.DNS.Hosts {
+		splitted := strings.Split(v, " ")
+		if len(splitted) != 2 {
+			return nil, fmt.Errorf("failed to parse dns records")
+		}
+		list = append(list, pihole.DNSRecord{
+			IP:     splitted[0],
+			Domain: splitted[1],
+		})
+	}
+
+	return list, nil
 }
 
 type CreateDNSRecordResponse struct {
@@ -70,11 +94,8 @@ func (c Client) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRec
 		return c.tokenClient.LocalDNS.Create(ctx, record.Domain, record.IP)
 	}
 
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/customdns.php", &url.Values{
-		"action": []string{"add"},
-		"ip":     []string{record.IP},
-		"domain": []string{record.Domain},
-	})
+	cfg := strings.Join([]string{record.IP, record.Domain}, "%20")
+	req, err := c.RequestWithSession2(ctx, "PUT", fmt.Sprintf("/api/config/dns/hosts/%s", cfg), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -83,16 +104,8 @@ func (c Client) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRec
 	if err != nil {
 		return nil, err
 	}
-
-	defer res.Body.Close()
-
-	var created CreateDNSRecordResponse
-	if err = json.NewDecoder(res.Body).Decode(&created); err != nil {
-		return nil, err
-	}
-
-	if !created.Success {
-		return nil, fmt.Errorf(created.Message)
+	if res.StatusCode != 201 {
+		return nil, fmt.Errorf("failed to create dns records, got status code %d", res.StatusCode)
 	}
 
 	return record, nil
@@ -138,11 +151,8 @@ func (c Client) DeleteDNSRecord(ctx context.Context, domain string) error {
 		return err
 	}
 
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/customdns.php", &url.Values{
-		"action": []string{"delete"},
-		"ip":     []string{record.IP},
-		"domain": []string{record.Domain},
-	})
+	cfg := strings.Join([]string{record.IP, record.Domain}, "%20")
+	req, err := c.RequestWithSession2(ctx, "DELETE", fmt.Sprintf("/api/config/dns/hosts/%s", cfg), nil)
 	if err != nil {
 		return err
 	}
@@ -151,8 +161,9 @@ func (c Client) DeleteDNSRecord(ctx context.Context, domain string) error {
 	if err != nil {
 		return err
 	}
-
-	defer res.Body.Close()
+	if res.StatusCode != 204 {
+		return fmt.Errorf("failed to delete dns records, got status code %d", res.StatusCode)
+	}
 
 	return nil
 }
