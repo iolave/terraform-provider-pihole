@@ -254,6 +254,12 @@ func (c *Client) login(ctx context.Context) error {
 		return fmt.Errorf("failed to format login request: %s", err)
 	}
 
+	if c.cfServiceToken != nil {
+		if err := c.cfServiceToken.Set(req); err != nil {
+			return err
+		}
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.client.Do(req)

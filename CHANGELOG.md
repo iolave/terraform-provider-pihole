@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [v0.2.1]
+### Fixed
+- Cloudflare access in client login.
+
 ## [v0.2.0]
 ### Fixed
 - Blocking now uses the `/api/dns/blocking` endpoint.
@@ -27,7 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Cloudflare access support.
 
-[unreleased]: https://github.com/iolave/terraform-provider-pihole/compare/v0.2.0...master
+[unreleased]: https://github.com/iolave/terraform-provider-pihole/compare/v0.2.1...master
+[v0.2.1]: https://github.com/iolave/terraform-provider-pihole/releases/tag/v0.2.1
 [v0.2.0]: https://github.com/iolave/terraform-provider-pihole/releases/tag/v0.2.0
 [v0.1.2]: https://github.com/iolave/terraform-provider-pihole/releases/tag/v0.1.2
 [v0.1.1]: https://github.com/iolave/terraform-provider-pihole/releases/tag/v0.1.1
