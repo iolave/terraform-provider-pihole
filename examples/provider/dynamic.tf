@@ -3,7 +3,7 @@ provider "docker" {
 }
 
 resource "docker_image" "pihole" {
-  name = "pihole/pihole:2022.05"
+  name = "pihole/pihole:2025.03.0"
 }
 
 locals {
@@ -45,5 +45,5 @@ resource "pihole_cname_record" "record" {
   domain = "foo.com"
   target = "bar.com"
 
-  depends_on = [ null_resource.pihole_wait ]
+  depends_on = [null_resource.pihole_wait]
 }

@@ -11,7 +11,9 @@ lint:
 
 generate:
 	#cd tools; go generate ./...
-	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.19.4
+	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.21.0 && \
+		cat CHANGELOG.md >> ./docs/index.md
+	
 
 fmt:
 	gofmt -s -w -e .
