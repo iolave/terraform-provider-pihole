@@ -35,7 +35,7 @@ type DNSRecord = pihole.DNSRecord
 // ListDNSRecords Returns the list of custom DNS records configured in pihole
 func (c Client) ListDNSRecords(ctx context.Context) (DNSRecordList, error) {
 	if c.tokenClient != nil {
-		return nil, fmt.Errorf("%w: set ad blocker status", ErrNotImplementedTokenClient)
+		return nil, fmt.Errorf("%w: list dns records", ErrNotImplementedTokenClient)
 	}
 
 	req, err := c.RequestWithSession2(ctx, "GET", "/api/config/dns/hosts", nil)

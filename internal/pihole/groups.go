@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
+	"io"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -75,9 +74,7 @@ func (c Client) ListGroups(ctx context.Context) (GroupList, error) {
 		return nil, fmt.Errorf("%w: list groups", ErrNotImplementedTokenClient)
 	}
 
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/groups.php", &url.Values{
-		"action": []string{"get_groups"},
-	})
+	req, err := c.RequestWithSession2(ctx, "GET", "/api/groups", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -86,15 +83,48 @@ func (c Client) ListGroups(ctx context.Context) (GroupList, error) {
 	if err != nil {
 		return nil, err
 	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to retrieve groups, got status code %d", res.StatusCode)
+	}
 
 	defer res.Body.Close()
-
-	var groupRes GroupResponseList
-	if err = json.NewDecoder(res.Body).Decode(&groupRes); err != nil {
+	type Response struct {
+		Groups []struct {
+			Name      string  `json:"name"`
+			Comment   *string `json:"comment"`
+			Enabled   bool    `json:"enabled"`
+			ID        int64   `json:"id"`
+			CreatedAt int64   `json:"date_added"`
+			UpdatedAt int64   `json:"date_modified"`
+		} `json:"groups"`
+	}
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var response Response
+	if err := json.Unmarshal(b, &response); err != nil {
 		return nil, err
 	}
 
-	return groupRes.ToGroupList(), nil
+	var list GroupList
+	for _, v := range response.Groups {
+		comment := ""
+		if v.Comment != nil {
+			comment = *v.Comment
+		}
+
+		list = append(list, &Group{
+			ID:           v.ID,
+			Enabled:      v.Enabled,
+			Name:         v.Name,
+			DateAdded:    time.Unix(v.UpdatedAt, 0),
+			DateModified: time.Unix(v.UpdatedAt, 0),
+			Description:  comment,
+		})
+	}
+
+	return list, nil
 }
 
 // GetGroup returns a Pi-hole group by name
@@ -160,10 +190,9 @@ func (c Client) CreateGroup(ctx context.Context, gr *GroupCreateRequest) (*Group
 		return nil, fmt.Errorf("group names must not contain spaces")
 	}
 
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/groups.php", &url.Values{
-		"action": []string{"add_group"},
-		"name":   []string{name},
-		"desc":   []string{gr.Description},
+	req, err := c.RequestWithSession2(ctx, "POST", "/api/groups", map[string]any{
+		"name":    gr.Name,
+		"comment": gr.Description,
 	})
 	if err != nil {
 		return nil, err
@@ -173,16 +202,8 @@ func (c Client) CreateGroup(ctx context.Context, gr *GroupCreateRequest) (*Group
 	if err != nil {
 		return nil, err
 	}
-
-	defer res.Body.Close()
-
-	var created GroupBasicResponse
-	if err = json.NewDecoder(res.Body).Decode(&created); err != nil {
-		return nil, err
-	}
-
-	if !created.Success {
-		return nil, fmt.Errorf(created.Message)
+	if res.StatusCode != 201 {
+		return nil, fmt.Errorf("failed to create group, got status code %d", res.StatusCode)
 	}
 
 	return c.GetGroup(ctx, name)
@@ -194,22 +215,11 @@ func (c Client) UpdateGroup(ctx context.Context, gr *GroupUpdateRequest) (*Group
 		return nil, fmt.Errorf("%w: update group", ErrNotImplementedTokenClient)
 	}
 
-	original, err := c.GetGroup(ctx, gr.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	enabled := "1"
-	if gr.Enabled != nil && !*gr.Enabled {
-		enabled = "0"
-	}
-
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/groups.php", &url.Values{
-		"action": []string{"edit_group"},
-		"name":   []string{gr.Name},
-		"desc":   []string{gr.Description},
-		"status": []string{enabled},
-		"id":     []string{strconv.FormatInt(original.ID, 10)},
+	path := fmt.Sprintf("/api/groups/%s", gr.Name)
+	req, err := c.RequestWithSession2(ctx, "PUT", path, map[string]any{
+		"name":    gr.Name,
+		"comment": gr.Description,
+		"enabled": gr.Enabled,
 	})
 	if err != nil {
 		return nil, err
@@ -219,16 +229,8 @@ func (c Client) UpdateGroup(ctx context.Context, gr *GroupUpdateRequest) (*Group
 	if err != nil {
 		return nil, err
 	}
-
-	defer res.Body.Close()
-
-	var updated GroupBasicResponse
-	if err = json.NewDecoder(res.Body).Decode(&updated); err != nil {
-		return nil, err
-	}
-
-	if !updated.Success {
-		return nil, fmt.Errorf(updated.Message)
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to update group, got status code %d", res.StatusCode)
 	}
 
 	return c.GetGroup(ctx, gr.Name)
@@ -240,15 +242,8 @@ func (c Client) DeleteGroup(ctx context.Context, name string) error {
 		return fmt.Errorf("%w: delete group", ErrNotImplementedTokenClient)
 	}
 
-	toDelete, err := c.GetGroup(ctx, name)
-	if err != nil {
-		return err
-	}
-
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/groups.php", &url.Values{
-		"action": []string{"delete_group"},
-		"id":     []string{fmt.Sprintf("[%s]", strconv.FormatInt(toDelete.ID, 10))},
-	})
+	path := fmt.Sprintf("/api/groups/%s", name)
+	req, err := c.RequestWithSession2(ctx, "DELETE", path, nil)
 	if err != nil {
 		return err
 	}
@@ -257,16 +252,8 @@ func (c Client) DeleteGroup(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-
-	defer res.Body.Close()
-
-	var deleted GroupBasicResponse
-	if err = json.NewDecoder(res.Body).Decode(&deleted); err != nil {
-		return err
-	}
-
-	if !deleted.Success {
-		return fmt.Errorf(deleted.Message)
+	if res.StatusCode != 204 {
+		return fmt.Errorf("failed to delete group, got status code %d", res.StatusCode)
 	}
 
 	return nil
