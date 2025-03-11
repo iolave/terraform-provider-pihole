@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [unreleased]
+### Fixed
+- Blocking now users the `/api/dns/blocking` endpoint.
 
 ## [v0.1.2]
 ### Fixed
@@ -21,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Cloudflare access support.
 
-[unreleased]: https://github.com/iolave/terraform-provider-pihole/compare/v0.1.1...master
+[unreleased]: https://github.com/iolave/terraform-provider-pihole/compare/v0.1.2...master
+[v0.1.2]: https://github.com/iolave/terraform-provider-pihole/releases/tag/v0.1.2
 [v0.1.1]: https://github.com/iolave/terraform-provider-pihole/releases/tag/v0.1.1
 [v0.1.0]: https://github.com/iolave/terraform-provider-pihole/releases/tag/v0.1.0
 [ryanwholey/terraform-provider-pihole]: https://github.com/ryanwholey/terraform-provider-pihole

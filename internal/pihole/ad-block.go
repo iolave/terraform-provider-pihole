@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 )
 
 type EnableAdBlockResponse struct {
@@ -27,23 +28,46 @@ func (c Client) GetAdBlockerStatus(ctx context.Context) (*EnableAdBlock, error) 
 		return nil, fmt.Errorf("%w: set ad blocker status", ErrNotImplementedTokenClient)
 	}
 
-	req, err := c.Request(ctx, "GET", "/admin/api.php?status", nil)
+	req, err := c.RequestWithSession2(ctx, "GET", "/api/dns/blocking", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
+
 	res, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to retrieve current status, got status code %d", res.StatusCode)
+	}
 
 	defer res.Body.Close()
-
-	var blocked EnableAdBlockResponse
-	if err := json.NewDecoder(res.Body).Decode(&blocked); err != nil {
+	type Response struct {
+		Blocking string `json:"blocking"`
+	}
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var response Response
+	if err := json.Unmarshal(b, &response); err != nil {
 		return nil, err
 	}
 
-	return blocked.ToEnableAdBlock(), nil
+	var enabled bool
+	switch response.Blocking {
+	case "disabled":
+		enabled = false
+	case "enabled":
+		enabled = true
+	default:
+		return nil, fmt.Errorf("got unexpected value, blocking=%s", response.Blocking)
+	}
+	if response.Blocking == "disabled" {
+		enabled = false
+	}
+
+	return &EnableAdBlock{Enabled: enabled}, nil
 }
 
 // SetAdBlockEnabled sets whether pihole ad blocking is enabled or not
@@ -52,12 +76,9 @@ func (c Client) SetAdBlockEnabled(ctx context.Context, enable bool) (*EnableAdBl
 		return nil, fmt.Errorf("%w: set ad blocker status", ErrNotImplementedTokenClient)
 	}
 
-	enabledParam := "enable"
-	if !enable {
-		enabledParam = "disable"
-	}
-
-	req, err := c.RequestWithAuth(ctx, "GET", fmt.Sprintf("/admin/api.php?%s", enabledParam), nil)
+	req, err := c.RequestWithSession2(ctx, "POST", "/api/dns/blocking", map[string]any{
+		"blocking": enable,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -66,17 +87,32 @@ func (c Client) SetAdBlockEnabled(ctx context.Context, enable bool) (*EnableAdBl
 	if err != nil {
 		return nil, err
 	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to enable/disable blocking, got status code %d", res.StatusCode)
+	}
 
 	defer res.Body.Close()
-
-	var blocked EnableAdBlockResponse
-	if err = json.NewDecoder(res.Body).Decode(&blocked); err != nil {
+	type Response struct {
+		Blocking string `json:"blocking"`
+	}
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var response Response
+	if err := json.Unmarshal(b, &response); err != nil {
 		return nil, err
 	}
 
-	if blocked.Status != fmt.Sprintf("%sd", enabledParam) {
-		return nil, fmt.Errorf("ad blocking could not be turned to %q", enabledParam)
+	var enabled bool
+	switch response.Blocking {
+	case "disabled":
+		enabled = false
+	case "enabled":
+		enabled = true
+	default:
+		return nil, fmt.Errorf("got unexpected value, blocking=%s", response.Blocking)
 	}
 
-	return blocked.ToEnableAdBlock(), nil
+	return &EnableAdBlock{Enabled: enabled}, nil
 }

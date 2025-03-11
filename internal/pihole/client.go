@@ -177,6 +177,39 @@ func (c Client) RequestWithSession(ctx context.Context, method string, path stri
 	return req, nil
 }
 
+// RequestWithSession2 executes a request with appropriate session authentication
+func (c Client) RequestWithSession2(ctx context.Context, method string, path string, data map[string]any) (*http.Request, error) {
+	if c.sessionToken == "" || c.sessionID == "" {
+		if err := c.Login(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, fmt.Sprintf("%s%s", c.URL, path), bytes.NewBuffer(b))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("content-type", "application/json")
+	req.Header.Add("X-FTL-SID", c.sessionID)
+	req.Header.Add("X-FTL-CSRF", c.sessionToken)
+
+	if c.cfServiceToken == nil {
+		return req, nil
+	}
+
+	if err := c.cfServiceToken.Set(req); err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // RequestWithAuth adds an auth token to the passed request
 func (c Client) RequestWithAuth(ctx context.Context, method string, path string, data *url.Values) (*http.Request, error) {
 	u, err := url.Parse(fmt.Sprintf("%s%s", c.URL, path))
