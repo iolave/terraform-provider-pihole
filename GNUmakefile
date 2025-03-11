@@ -10,10 +10,8 @@ lint:
 	golangci-lint run ./...
 
 generate:
-	#cd tools; go generate ./...
 	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.21.0 && \
-		cat CHANGELOG.md >> ./docs/index.md
-	
+	cat CHANGELOG.md > ./docs/CHANGELOG.md
 
 fmt:
 	gofmt -s -w -e .
