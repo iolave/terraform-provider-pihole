@@ -17,6 +17,8 @@ Use the navigation to the left to read about the available resources.
 
 - `api_token` (String) Experimental: Pi-hole API token. Conflicts with `password`.
 - `ca_file` (String) CA file to connect to Pi-hole with TLS
+- `cf_access_client_id` (String) Cloudflare access client id
+- `cf_access_client_secret` (String) Cloudflare access client secret
 - `password` (String) The admin password used to login to the admin dashboard. Conflicts with `api_token`.
 - `url` (String) URL where Pi-hole is deployed
 

@@ -1,14 +1,16 @@
 package pihole
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/iolave/go-proxmox/pkg/cloudflare"
 	pihole "github.com/ryanwholey/go-pihole"
 )
@@ -209,14 +211,17 @@ func (c Client) RequestWithAuth(ctx context.Context, method string, path string,
 
 // login sets a new sessionID and csrf token in the client to be used for logged in requests
 func (c *Client) login(ctx context.Context) error {
-	data := &url.Values{
-		"pw": []string{c.password},
+	data := map[string]any{
+		"password": c.password,
 	}
+	b, _ := json.Marshal(data)
 
-	req, err := c.Request(ctx, "POST", "/admin/index.php?login=", data)
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s%s", c.URL, "/api/auth"), bytes.NewBuffer(b))
 	if err != nil {
 		return fmt.Errorf("failed to format login request: %s", err)
 	}
+
+	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.client.Do(req)
 	if err != nil {
@@ -224,30 +229,33 @@ func (c *Client) login(ctx context.Context) error {
 	}
 
 	defer res.Body.Close()
-
-	sessionCookie := res.Header.Get("Set-Cookie")
-	if sessionCookie == "" {
-		return fmt.Errorf("session ID not found in response")
-	}
-
-	parsedCookie := strings.Split(sessionCookie, "=")
-	if len(parsedCookie) < 2 {
-		return fmt.Errorf("malformed session cookie")
-	}
-
-	c.sessionID = strings.Split(parsedCookie[1], ";")[0]
-
-	doc, err := goquery.NewDocumentFromReader(res.Body)
+	b, err = io.ReadAll(res.Body)
 	if err != nil {
-		return fmt.Errorf("failed to parse login response: %s", err)
+		return fmt.Errorf("failed to read req body: %s", err)
 	}
 
-	token := doc.Find("#token").Text()
-	if token == "" {
-		return fmt.Errorf("invalid password")
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to login, got status code: %d", res.StatusCode)
 	}
 
-	c.sessionToken = token
+	type Response struct {
+		Session struct {
+			Valid    bool   `json:"valid"`
+			TOTP     bool   `json:"totp"`
+			SID      string `json:"sid"`
+			CSRF     string `json:"csrf"`
+			Validity int    `json:"validity"`
+			Message  string `json:"message"`
+		} `json:"session"`
+	}
+
+	var responseResult Response
+	if err := json.Unmarshal(b, &responseResult); err != nil {
+		return fmt.Errorf("unable to parse login response: %s", err)
+	}
+
+	c.sessionID = responseResult.Session.SID
+	c.sessionToken = responseResult.Session.CSRF
 	return nil
 }
 
