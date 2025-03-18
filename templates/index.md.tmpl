@@ -10,7 +10,7 @@ The [Pi-hole](https://pi-hole.net) provider is used to manage Pi-hole resources.
 
 Use the navigation to the left to read about the available resources.
 
-This is a fork of [ryanwholey/terraform-provider-pihole](https://github.com/ryanwholey/terraform-provider-proxmox) and it uses the modern `/api` format instead of the `/admin/api.php` one (if you require the old format, please use [ryanwholey/pihole](https://registry.terraform.io/providers/ryanwholey/pihole/latest/docs) provider until both versions are supported within this provider).
+This is a fork of [ryanwholey/terraform-provider-pihole](https://github.com/ryanwholey/terraform-provider-pihole) and it uses the modern `/api` format instead of the `/admin/api.php` one (if you require the old format, please use [ryanwholey/pihole](https://registry.terraform.io/providers/ryanwholey/pihole/latest/docs) provider until both versions are supported within this provider).
 
 See the full changelog [here](https://github.com/iolave/terraform-provider-pihole/blob/master/CHANGELOG.md)
 

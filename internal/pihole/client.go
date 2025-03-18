@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/iolave/go-proxmox/pkg/cloudflare"
 	pihole "github.com/ryanwholey/go-pihole"
@@ -206,6 +208,8 @@ func (c Client) RequestWithSession2(ctx context.Context, method string, path str
 	if err := c.cfServiceToken.Set(req); err != nil {
 		return nil, err
 	}
+
+	time.Sleep(time.Second * time.Duration(rand.Int64N(60)))
 
 	return req, nil
 }
