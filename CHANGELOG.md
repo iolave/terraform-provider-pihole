@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased]
 ### Fixed
 - 429 status code responses by adding a random timer to the pihole api.
+- 429 status code responses adding a login call to the client's init method.
 
 ## [v0.2.1]
 ### Fixed

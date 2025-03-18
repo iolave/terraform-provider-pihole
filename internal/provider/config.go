@@ -68,5 +68,9 @@ func (c Config) Client(ctx context.Context) (*pihole.Client, error) {
 		return nil, err
 	}
 
+	if err := client.Login(ctx); err != nil {
+		return nil, err
+	}
+
 	return client, nil
 }
