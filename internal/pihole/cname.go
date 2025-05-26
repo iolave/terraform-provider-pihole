@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
+	"io"
+	"strings"
 
 	pihole "github.com/ryanwholey/go-pihole"
 )
@@ -34,12 +35,10 @@ type CNAMERecordList = pihole.CNAMERecordList
 // ListCNAMERecords returns a list of the configured CNAME Pi-hole records
 func (c Client) ListCNAMERecords(ctx context.Context) (CNAMERecordList, error) {
 	if c.tokenClient != nil {
-		return c.tokenClient.LocalCNAME.List(ctx)
+		return nil, fmt.Errorf("%w: list dns records", ErrNotImplementedTokenClient)
 	}
 
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/customcname.php", &url.Values{
-		"action": []string{"get"},
-	})
+	req, err := c.RequestWithSession2(ctx, "GET", "/api/config/dns/cnameRecords", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -48,15 +47,40 @@ func (c Client) ListCNAMERecords(ctx context.Context) (CNAMERecordList, error) {
 	if err != nil {
 		return nil, err
 	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to retrieve dns records, got status code %d", res.StatusCode)
+	}
 
 	defer res.Body.Close()
-
-	var cnameRes CNAMERecordsListResponse
-	if err = json.NewDecoder(res.Body).Decode(&cnameRes); err != nil {
+	type Response struct {
+		Config struct {
+			DNS struct {
+				Hosts []string `json:"cnameRecords"`
+			} `json:"dns"`
+		} `json:"config"`
+	}
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var response Response
+	if err := json.Unmarshal(b, &response); err != nil {
 		return nil, err
 	}
 
-	return cnameRes.ToCNAMERecordList(), nil
+	var list pihole.CNAMERecordList
+	for _, v := range response.Config.DNS.Hosts {
+		splitted := strings.Split(v, ",")
+		if len(splitted) != 2 {
+			return nil, fmt.Errorf("failed to parse dns records")
+		}
+		list = append(list, pihole.CNAMERecord{
+			Domain: splitted[0],
+			Target: splitted[1],
+		})
+	}
+
+	return list, nil
 }
 
 // GetCNAMERecord returns a CNAMERecord for the passed domain if found
@@ -99,11 +123,8 @@ func (c Client) CreateCNAMERecord(ctx context.Context, record *CNAMERecord) (*CN
 		return c.tokenClient.LocalCNAME.Create(ctx, record.Domain, record.Target)
 	}
 
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/customcname.php", &url.Values{
-		"action": []string{"add"},
-		"domain": []string{record.Domain},
-		"target": []string{record.Target},
-	})
+	cfg := strings.Join([]string{record.Domain, record.Target}, "%2C")
+	req, err := c.RequestWithSession2(ctx, "PUT", fmt.Sprintf("/api/config/dns/cnameRecords/%s", cfg), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -112,19 +133,11 @@ func (c Client) CreateCNAMERecord(ctx context.Context, record *CNAMERecord) (*CN
 	if err != nil {
 		return nil, err
 	}
-
-	defer res.Body.Close()
-
-	var created CreateCNAMERecordResponse
-	if err = json.NewDecoder(res.Body).Decode(&created); err != nil {
-		return nil, err
+	if res.StatusCode != 201 {
+		return nil, fmt.Errorf("failed to create CNAME records, got status code %d", res.StatusCode)
 	}
 
-	if !created.Success {
-		return nil, fmt.Errorf(created.Message)
-	}
-
-	return record, err
+	return record, nil
 }
 
 // DeleteCNAMERecord handles CNAME record deletion for the passed domain
@@ -138,11 +151,8 @@ func (c Client) DeleteCNAMERecord(ctx context.Context, domain string) error {
 		return err
 	}
 
-	req, err := c.RequestWithSession(ctx, "POST", "/admin/scripts/pi-hole/php/customcname.php", &url.Values{
-		"action": []string{"delete"},
-		"domain": []string{record.Domain},
-		"target": []string{record.Target},
-	})
+	cfg := strings.Join([]string{record.Domain, record.Target}, "%2C")
+	req, err := c.RequestWithSession2(ctx, "DELETE", fmt.Sprintf("/api/config/dns/cnameRecords/%s", cfg), nil)
 	if err != nil {
 		return err
 	}
@@ -151,8 +161,9 @@ func (c Client) DeleteCNAMERecord(ctx context.Context, domain string) error {
 	if err != nil {
 		return err
 	}
-
-	defer res.Body.Close()
+	if res.StatusCode != 204 {
+		return fmt.Errorf("failed to delete CNAME records, got status code %d", res.StatusCode)
+	}
 
 	return nil
 }
